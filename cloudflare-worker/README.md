@@ -52,10 +52,6 @@ wrangler secret put OPENROUTER_API_KEY
 ```
 
 When prompted, paste your OpenRouter API key:
-```
-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
-```
-
 Press Enter. The key is now securely stored in Cloudflare (never in your code).
 
 ---
