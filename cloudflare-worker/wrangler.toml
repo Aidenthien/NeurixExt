@@ -1,0 +1,21 @@
+# Cloudflare Workers Configuration
+# Learn more at: https://developers.cloudflare.com/workers/
+
+name = "neurix-openrouter-proxy"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Environment variables (secrets should be set via CLI)
+# Run: wrangler secret put OPENROUTER_API_KEY
+# [vars]
+# APP_URL = "https://neurix-ext.com"
+
+# Uncomment to enable custom domain
+# routes = [
+#   { pattern = "api.yourdomain.com/*", zone_name = "yourdomain.com" }
+# ]
+
+# Workers KV for persistent rate limiting (optional upgrade)
+# [[kv_namespaces]]
+# binding = "RATE_LIMIT_STORE"
+# id = "your_kv_namespace_id"

@@ -1,0 +1,14 @@
+# Wrangler
+.wrangler/
+worker-configuration.d.ts
+
+# Logs
+*.log
+
+# Environment files (if you accidentally create them - DON'T!)
+.env
+.env.local
+.dev.vars
+
+# Node modules (if you add dependencies later)
+node_modules/

@@ -1,12 +1,23 @@
-This is a [Plasmo extension](https://docs.plasmo.com/) project bootstrapped with [`plasmo init`](https://www.npmjs.com/package/plasmo).
+# NeurixExt - AI Chrome Extension
 
-## Getting Started
+A Chrome extension that provides multi-model AI chat powered by OpenRouter API with a secure Cloudflare Worker backend.
+
+## ✨ Features
+
+- 🤖 **Multiple AI Models**: GPT-OSS-20B, GLM-4.5-Air, Qwen3-235B, Gemini-2.0-Flash, DeepSeek
+- 🔒 **Secure**: API keys stored in Cloudflare Workers (not in extension code)
+- 🚀 **Fast**: Global edge network via Cloudflare
+- 💰 **Free**: Up to 100,000 requests/day
+- 🎯 **Smart**: Select which models to use
+- 📊 **Monitor**: Track usage in Cloudflare dashboard
+
+---
+
+## 🚀 Quick Start - Development
 
 First, run the development server:
 
 ```bash
-pnpm dev
-# or
 npm run dev
 ```
 
@@ -16,17 +27,38 @@ You can start editing the popup by modifying `popup.tsx`. It should auto-update 
 
 For further guidance, [visit our Documentation](https://docs.plasmo.com/)
 
-## Making production build
+---
+
+## 🔧 Production Deployment
+
+For production with secure API key storage, see **[DEPLOYMENT.md](./DEPLOYMENT.md)** for complete Cloudflare Worker setup.
+
+### Quick Deploy Steps:
+
+1. **Install Wrangler**: `npm install -g wrangler`
+2. **Deploy Worker**: 
+   ```bash
+   cd cloudflare-worker
+   wrangler login
+   wrangler secret put OPENROUTER_API_KEY
+   wrangler deploy
+   ```
+3. **Update Config**: Add worker URL to `.env.local`
+4. **Build Extension**: `npm run build`
+
+Full guide: [cloudflare-worker/README.md](./cloudflare-worker/README.md)
+
+---
+
+## 📦 Building for Production
 
 Run the following:
 
 ```bash
-pnpm build
-# or
 npm run build
 ```
 
-This should create a production bundle for your extension, ready to be zipped and published to the stores.
+This creates a production bundle ready to be zipped and published to the Chrome Web Store.
 
 ## Submit to the webstores
 

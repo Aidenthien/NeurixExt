@@ -1,32 +1,12 @@
 import type { AIRequest, AIResponse } from '../types/ai-models'
 import { AI_MODELS } from '../config/models'
-import { callOpenAI } from './openai-service'
-import { callClaude } from './anthropic-service'
-import { callGemini } from './google-service'
-import { callDeepSeek } from './deepseek-service'
+import { callOpenRouter } from './openrouter-service'
 
 export async function getAllAIResponses(request: AIRequest): Promise<AIResponse[]> {
   const enabledModels = AI_MODELS.filter(model => model.enabled)
   
   const responsePromises = enabledModels.map(async (model) => {
-    let result
-    
-    switch (model.name) {
-      case 'ChatGPT':
-        result = await callOpenAI(request)
-        break
-      case 'Claude':
-        result = await callClaude(request)
-        break
-      case 'Gemini':
-        result = await callGemini(request)
-        break
-      case 'DeepSeek':
-        result = await callDeepSeek(request)
-        break
-      default:
-        result = { success: false, error: 'Unknown model', model: model.name }
-    }
+    const result = await callOpenRouter(request, model.name)
 
     return {
       model: model.name,
@@ -48,24 +28,7 @@ export async function getSingleAIResponse(modelName: string, request: AIRequest)
     return null
   }
 
-  let result
-  
-  switch (modelName) {
-    case 'ChatGPT':
-      result = await callOpenAI(request)
-      break
-    case 'Claude':
-      result = await callClaude(request)
-      break
-    case 'Gemini':
-      result = await callGemini(request)
-      break
-    case 'DeepSeek':
-      result = await callDeepSeek(request)
-      break
-    default:
-      return null
-  }
+  const result = await callOpenRouter(request, modelName)
 
   return {
     model: model.name,

@@ -1,0 +1,21 @@
+{
+  "name": "neurix-openrouter-proxy",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy for NeurixExt - OpenRouter API",
+  "main": "worker.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "test": "curl http://localhost:8787/health"
+  },
+  "keywords": [
+    "cloudflare",
+    "workers",
+    "openrouter",
+    "proxy",
+    "chrome-extension"
+  ],
+  "author": "aidenthien",
+  "license": "MIT"
+}

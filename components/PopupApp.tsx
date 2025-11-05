@@ -1,5 +1,8 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import logoImage from "~assets/NeurixExt.png"
+import { AI_MODELS } from "~backend/config/models"
+import { getSingleAIResponse } from "~backend/services/ai-service"
+import type { AIRequest } from "~backend/types/ai-models"
 
 interface AIResponse {
   model: string
@@ -16,19 +19,32 @@ interface Message {
   aiResponses?: AIResponse[]
 }
 
+interface ModelConfig {
+  name: string
+  icon: string
+  color: string
+  available: boolean
+  enabled: boolean
+}
+
 function PopupApp() {
   const [showChat, setShowChat] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [inputText, setInputText] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [expandedResponse, setExpandedResponse] = useState<{ messageId: number; modelName: string } | null>(null)
+  const [showModelSelector, setShowModelSelector] = useState(false)
+  const [availableModels, setAvailableModels] = useState<ModelConfig[]>([])
+  const [selectedModels, setSelectedModels] = useState<Set<string>>(new Set())
+  const [checkingStatus, setCheckingStatus] = useState(false)
 
-  const aiModels = [
-    { name: "ChatGPT", icon: "🤖", color: "#10a37f" },
-    { name: "Claude", icon: "🎭", color: "#6366f1" },
-    { name: "Gemini", icon: "✨", color: "#4285f4" },
-    { name: "DeepSeek", icon: "🔍", color: "#8b5cf6" }
-  ]
+  const aiModels = AI_MODELS.map(model => ({
+    name: model.name,
+    icon: model.icon,
+    color: model.color,
+    available: false,
+    enabled: model.enabled
+  }))
 
   const renderMarkdown = (text: string) => {
     let html = text
@@ -47,6 +63,69 @@ function PopupApp() {
     return html
   }
 
+  useEffect(() => {
+    const savedSelection = localStorage.getItem('selectedModels')
+    if (savedSelection) {
+      setSelectedModels(new Set(JSON.parse(savedSelection)))
+    } else {
+      setSelectedModels(new Set(aiModels.map(m => m.name)))
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showChat && availableModels.length === 0) {
+      checkModelsStatus()
+    }
+  }, [showChat])
+
+  const checkModelsStatus = async () => {
+    setCheckingStatus(true)
+    const modelsWithStatus = await Promise.all(
+      aiModels.map(async (model) => {
+        const isAvailable = await checkSingleModelStatus(model.name)
+        return { ...model, available: isAvailable }
+      })
+    )
+    setAvailableModels(modelsWithStatus)
+    setCheckingStatus(false)
+  }
+
+  const checkSingleModelStatus = async (modelName: string): Promise<boolean> => {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/models')
+      if (response.ok) {
+        return true
+      }
+      return false
+    } catch {
+      return false
+    }
+  }
+
+  const handleModelToggle = (modelName: string) => {
+    const newSelection = new Set(selectedModels)
+    if (newSelection.has(modelName)) {
+      newSelection.delete(modelName)
+    } else {
+      newSelection.add(modelName)
+    }
+    setSelectedModels(newSelection)
+    localStorage.setItem('selectedModels', JSON.stringify(Array.from(newSelection)))
+  }
+
+  const handleSelectAll = () => {
+    const availableModelNames = availableModels
+      .filter(m => m.available)
+      .map(m => m.name)
+    setSelectedModels(new Set(availableModelNames))
+    localStorage.setItem('selectedModels', JSON.stringify(availableModelNames))
+  }
+
+  const handleDeselectAll = () => {
+    setSelectedModels(new Set())
+    localStorage.setItem('selectedModels', JSON.stringify([]))
+  }
+
   const handleServiceClick = () => {
     setShowChat(true)
   }
@@ -55,12 +134,13 @@ function PopupApp() {
     setShowChat(false)
   }
 
-  const handleSendMessage = () => {
-    if (!inputText.trim() || isLoading) return
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || isLoading || selectedModels.size === 0) return
 
+    const userMessageText = inputText
     const newMessage: Message = {
       id: messages.length + 1,
-      text: inputText,
+      text: userMessageText,
       sender: "user",
       timestamp: new Date()
     }
@@ -69,26 +149,82 @@ function PopupApp() {
     setInputText("")
     setIsLoading(true)
 
-    // Simulate AI responses from different models
-    setTimeout(() => {
-      const aiResponses: AIResponse[] = aiModels.map((model) => ({
-        model: model.name,
-        icon: model.icon,
-        color: model.color,
-        text: `**${model.name} Response:**\n\nThis is a demo response from ${model.name}. In production, this would:\n\n• Connect to the actual ${model.name} API\n• Process your message: "${inputText}"\n• Generate intelligent replies\n• Support full **markdown** formatting\n\n\`Code example: console.log("Hello from ${model.name}")\`\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`
-      }))
+    const selectedAvailableModels = availableModels.filter(
+      model => selectedModels.has(model.name) && model.available
+    )
 
-      const aiMessage: Message = {
-        id: messages.length + 2,
-        text: "",
-        sender: "ai",
-        timestamp: new Date(),
-        aiResponses
+    // Create AI request
+    const request: AIRequest = {
+      message: userMessageText,
+      temperature: 0.7,
+      maxTokens: 500
+    }
+
+    // Create AI message placeholder with loading states
+    const aiMessageId = messages.length + 2
+    const initialResponses: AIResponse[] = selectedAvailableModels.map((model) => ({
+      model: model.name,
+      icon: model.icon,
+      color: model.color,
+      text: '⏳ Loading...'
+    }))
+
+    const aiMessage: Message = {
+      id: aiMessageId,
+      text: "",
+      sender: "ai",
+      timestamp: new Date(),
+      aiResponses: initialResponses
+    }
+    
+    setMessages(prev => [...prev, aiMessage])
+    setIsLoading(false)
+
+    // Call all models in parallel and update responses as they arrive
+    selectedAvailableModels.forEach(async (model, index) => {
+      try {
+        const result = await getSingleAIResponse(model.name, request)
+        
+        const updatedResponse: AIResponse = result ? {
+          model: result.model,
+          icon: model.icon,
+          color: model.color,
+          text: result.text
+        } : {
+          model: model.name,
+          icon: model.icon,
+          color: model.color,
+          text: `❌ Error: Unable to get response from ${model.name}`
+        }
+
+        // Update the specific model's response
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === aiMessageId) {
+            const updatedResponses = [...(msg.aiResponses || [])]
+            updatedResponses[index] = updatedResponse
+            return { ...msg, aiResponses: updatedResponses }
+          }
+          return msg
+        }))
+      } catch (error) {
+        console.error(`Error getting response from ${model.name}:`, error)
+        
+        // Update with error message
+        setMessages(prev => prev.map(msg => {
+          if (msg.id === aiMessageId) {
+            const updatedResponses = [...(msg.aiResponses || [])]
+            updatedResponses[index] = {
+              model: model.name,
+              icon: model.icon,
+              color: model.color,
+              text: `❌ Error: Failed to connect to ${model.name}`
+            }
+            return { ...msg, aiResponses: updatedResponses }
+          }
+          return msg
+        }))
       }
-      
-      setMessages(prev => [...prev, aiMessage])
-      setIsLoading(false)
-    }, 1500)
+    })
   }
 
   const handleExpandResponse = (messageId: number, modelName: string) => {
@@ -135,6 +271,19 @@ function PopupApp() {
             <span className="tagline">{showChat ? "AI Chat" : "AI Assistant"}</span>
           </div>
         </div>
+        {showChat && (
+          <button
+            className="model-selector-button header-button"
+            onClick={() => setShowModelSelector(!showModelSelector)}
+            title="Select AI models"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path d="M12 1v6m0 6v6m9-9h-6m-6 0H3"></path>
+            </svg>
+            <span className="model-count">{selectedModels.size}</span>
+          </button>
+        )}
       </div>
 
       <div className="popup-content-wrapper">
@@ -234,16 +383,17 @@ function PopupApp() {
             <div className="chat-input-container">
               <textarea
                 className="chat-input"
-                placeholder="Type your message..."
+                placeholder={selectedModels.size === 0 ? "Select models first..." : "Type your message..."}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyPress={handleKeyPress}
                 rows={1}
+                disabled={selectedModels.size === 0}
               />
               <button 
                 className="send-button"
                 onClick={handleSendMessage}
-                disabled={!inputText.trim() || isLoading}
+                disabled={!inputText.trim() || isLoading || selectedModels.size === 0}
               >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="22" y1="2" x2="11" y2="13"></line>
@@ -254,6 +404,51 @@ function PopupApp() {
           </div>
         </div>
       </div>
+
+      {showModelSelector && (
+        <div className="model-selector-overlay" onClick={() => setShowModelSelector(false)}>
+          <div className="model-selector-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="model-selector-header">
+              <h4>Select AI Models</h4>
+              <div className="model-selector-actions">
+                <button onClick={handleSelectAll} className="selector-action-btn">All</button>
+                <button onClick={handleDeselectAll} className="selector-action-btn">None</button>
+                <button onClick={checkModelsStatus} className="selector-action-btn" disabled={checkingStatus}>
+                  {checkingStatus ? '...' : '🔄'}
+                </button>
+              </div>
+            </div>
+            <div className="model-selector-list">
+              {availableModels.length === 0 ? (
+                <div className="model-selector-loading">
+                  Checking model availability...
+                </div>
+              ) : (
+                availableModels.map((model) => (
+                  <label
+                    key={model.name}
+                    className={`model-selector-item ${!model.available ? 'unavailable' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedModels.has(model.name)}
+                      onChange={() => handleModelToggle(model.name)}
+                      disabled={!model.available}
+                    />
+                    <span className="model-checkbox-icon">{model.icon}</span>
+                    <span className="model-checkbox-name">{model.name}</span>
+                    {!model.available && <span className="model-status-badge">Unavailable</span>}
+                    {model.available && <span className="model-status-badge available">Available</span>}
+                  </label>
+                ))
+              )}
+            </div>
+            <div className="model-selector-footer">
+              <span className="selected-count">{selectedModels.size} model(s) selected</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={`popup-footer ${showChat ? 'hidden' : ''}`}>
         <a href="mailto:aidenthienweijian@gmail.com" className="footer-link">
